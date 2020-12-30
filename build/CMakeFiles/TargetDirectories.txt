@@ -1,3 +1,0 @@
-/home/zhcguo/linuxMount/AudioStreamPlayer/3rd_src/CMakeUsage/build/CMakeFiles/rebuild_cache.dir
-/home/zhcguo/linuxMount/AudioStreamPlayer/3rd_src/CMakeUsage/build/CMakeFiles/edit_cache.dir
-/home/zhcguo/linuxMount/AudioStreamPlayer/3rd_src/CMakeUsage/build/CMakeFiles/DecodeAudio.dir

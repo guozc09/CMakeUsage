@@ -4,7 +4,7 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/home/zhcguo/LinuxMount/AudioStreamPlayer/3rd/FFmpeg/include/**"
+                "/home/zhcguo/linuxMount/AudioStreamPlayer/3rd/FFmpeg/include/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

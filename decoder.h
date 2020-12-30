@@ -1,55 +1,52 @@
+#ifndef __DECODER_H__
+#define __DECODER_H__
 
 #define __STDC_CONSTANT_MACROS
-#include <string>
 #include <stdlib.h>
 #include <string.h>
+
 #include <iostream>
 #include <memory>
+#include <string>
+
 
 #ifdef __cplusplus
-extern "C"{
+extern "C"
+{
 #endif
+#include "libavformat/avformat.h"
 #include "libavutil/avassert.h"
 #include "libavutil/channel_layout.h"
-#include "libavutil/opt.h"
-#include "libavutil/mathematics.h"
-#include "libavutil/timestamp.h"
-#include "libavformat/avformat.h"
-#include "libswscale/swscale.h"
-#include "libswresample/swresample.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/mathematics.h"
+#include "libavutil/opt.h"
+#include "libavutil/timestamp.h"
+#include "libswresample/swresample.h"
+#include "libswscale/swscale.h"
 #ifdef __cplusplus
 }
 #endif
 
-#include "callback.h"
+using CPcmCallback = int (*)(char *data, int len, int ts);
 
-class decoder
-{
-private:
-    /* data */
-public:
-    decoder(/* args */);
-    ~decoder();
-public:
-    int init();
-    void setUrl(std::string url);
-    std::string &getUrl();
+class Decoder {
+  public:
+    Decoder(std::string url, CPcmCallback cbk);
+    ~Decoder();
+
+  public:
     void decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame);
-    void setCallback(CPcmCallback _CPcmCallback);
     void run();
-    bool clear();
- 
-private:
+
+  private:
     std::string _url;
     CPcmCallback _CPcmCallback;
     AVFormatContext *_fmt_ctx = nullptr;
-    AVCodec * _codec;
+    AVCodec *_codec;
     AVCodecContext *_c;
     int _video_index;
     int _audio_index;
     AVFrame *frame;
 };
 
-
-
+#endif

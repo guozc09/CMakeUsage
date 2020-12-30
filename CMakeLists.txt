@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.10)
 # set the project name
 project(DecodeAudio)
 
+# set the project name and version
+project(DecodeAudio VERSION 1.0)
+
 set(LINK_PATH ${CMAKE_SOURCE_DIR}/../../3rd/FFmpeg/lib)
 set(FFmpegInclude ${CMAKE_SOURCE_DIR}/../../3rd/FFmpeg/include)
 
@@ -14,15 +17,10 @@ add_executable(DecodeAudio
     decoder.cpp
     test.cpp)
 
-set(mFFmpeg  libavcodec.so libavformat.so libswscale.so libavutil.so libavfilter.so libswresample.so)
+set(mFFmpeg avcodec avformat swscale avutil avfilter swresample)
 target_link_libraries(DecodeAudio ${mFFmpeg})
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
-
-cmake_minimum_required(VERSION 3.10)
-
-# set the project name and version
-project(DecodeAudio VERSION 1.0)
 
 configure_file(DecodeAudioConfig.h.in DecodeAudioConfig.h)
 

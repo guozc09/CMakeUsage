@@ -1,27 +1,25 @@
+#include <iostream>
 #include "decoder.h"
 
-decoder::decoder(/* args */):
-_fmt_ctx(nullptr),
-_codec(nullptr),
-_c(nullptr),
-_CPcmCallback(nullptr),
-_video_index(-1),
-_audio_index(-1){
+using namespace std;
+
+Decoder::Decoder(std::string url, CPcmCallback cbk)
+    : _url(url),
+      _fmt_ctx(nullptr),
+      _codec(nullptr),
+      _c(nullptr),
+      _CPcmCallback(cbk),
+      _video_index(-1),
+      _audio_index(-1) {
     av_register_all();
     avformat_network_init();
-}
 
-decoder::~decoder(){
-    clear();
-}
-
-int decoder::init(){
     if (avformat_open_input(&_fmt_ctx, _url.c_str(), NULL, NULL) < 0) {
-        return false;
+        cout << "avformat_open_input false" << endl;
     }
 
     if (avformat_find_stream_info(_fmt_ctx, nullptr) < 0) {
-        return false;
+        cout << "avformat_find_stream_info false" << endl;
     }
 
     for (int i = 0; i < _fmt_ctx->nb_streams; i++) {
@@ -36,47 +34,49 @@ int decoder::init(){
         }
     }
 
-    _c = _fmt_ctx->streams[_audio_index]->codec; 
-    this->_codec = avcodec_find_decoder(_c->codec_id); 
+    _c = _fmt_ctx->streams[_audio_index]->codec;
+    this->_codec = avcodec_find_decoder(_c->codec_id);
     if (!_codec) {
-        return false; //Codec not found
+        cout << "Codec not found" << endl;
     }
 
     if (avcodec_open2(_c, _codec, NULL) < 0) {
-        avcodec_free_context(&_c); //free it
+        avcodec_free_context(&_c);  // free it
         this->_c = nullptr;
-        return false; //Could not open codec
+        cout << "Could not open codec" << endl;
+    }
+}
+
+Decoder::~Decoder() {
+    if (_c != NULL) {
+        avcodec_close(_c);
     }
 
-    return 0;
+    if (_fmt_ctx != nullptr) {
+        if (!(_fmt_ctx->flags & AVFMT_NOFILE)) {
+            avio_close(_fmt_ctx->pb);
+            _fmt_ctx->pb = nullptr;
+        }
+
+        avformat_close_input(&_fmt_ctx);
+        _fmt_ctx = nullptr;
+    }
 }
 
-void decoder::setUrl(std::string url){
-    this->_url=url;
-}
-
-std::string & decoder::getUrl(){
-    return this->_url;
-}
-
-void decoder::setCallback(CPcmCallback _CPcmCallback){
-    this->_CPcmCallback=_CPcmCallback;
-}
-
-void decoder::run(){
+void Decoder::run() {
     AVFrame *decoded_frame = NULL;
     if (!(decoded_frame = av_frame_alloc())) {
-        return ;
+        return;
     }
 
-    AVPacket pkt={0};
+    AVPacket pkt = {0};
     while (true) {
         if (av_read_frame(_fmt_ctx, &pkt) < 0) {
             av_packet_unref(&pkt);
             break;
         }
 
-        if(pkt.stream_index!=_audio_index){
+        if (pkt.stream_index != _audio_index) {
             av_packet_unref(&pkt);
             continue;
         }
@@ -84,56 +84,35 @@ void decoder::run(){
         decode(_c, &pkt, decoded_frame);
         av_packet_unref(&pkt);
     }
-    
+
     av_frame_free(&decoded_frame);
     av_packet_unref(&pkt);
 }
 
-bool decoder::clear(){
-    if (_c!=NULL){
-        avcodec_close(_c);
-    }
-
-    if (_fmt_ctx != nullptr) {
-        if (!(_fmt_ctx->flags & AVFMT_NOFILE)){
-            avio_close(_fmt_ctx->pb);
-            _fmt_ctx->pb= nullptr;
-        }
-
-        avformat_close_input(&_fmt_ctx);
-        _fmt_ctx = nullptr;
-    }
-    
-    return true;
-}
-
-
-
-void decoder::decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame)
-{
+void Decoder::decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame) {
     int ret;
     ret = avcodec_send_packet(dec_ctx, pkt);
     if (ret < 0) {
-        return ;
+        return;
     }
 
     while (ret >= 0) {
         av_frame_unref(frame);
         ret = avcodec_receive_frame(dec_ctx, frame);
-        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF){
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
             return;
-        } 
+        }
 
         else if (ret < 0) {
             return;
         }
 
-        int buff_size = av_samples_get_buffer_size(frame->linesize,frame->channels,frame->nb_samples,dec_ctx->sample_fmt,0);
-        if (_CPcmCallback==nullptr){
-            return ;
+        int buff_size =
+            av_samples_get_buffer_size(frame->linesize, frame->channels, frame->nb_samples, dec_ctx->sample_fmt, 0);
+        if (_CPcmCallback == nullptr) {
+            return;
         }
 
-        _CPcmCallback((char *)(frame->data[0]),buff_size,frame->pts);
+        _CPcmCallback((char *)(frame->data[0]), buff_size, frame->pts);
     }
 }
-

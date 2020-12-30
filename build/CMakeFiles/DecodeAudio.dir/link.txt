@@ -1,1 +1,0 @@
-/bin/g++-9  -g   CMakeFiles/DecodeAudio.dir/decoder.cpp.o CMakeFiles/DecodeAudio.dir/test.cpp.o  -o bin/DecodeAudio   -L/home/zhcguo/linuxMount/AudioStreamPlayer/3rd_src/CMakeUsage/../../3rd/FFmpeg/lib  -Wl,-rpath,/home/zhcguo/linuxMount/AudioStreamPlayer/3rd_src/CMakeUsage/../../3rd/FFmpeg/lib -lavcodec -lavformat -lswscale -lavutil -lavfilter -lswresample 
