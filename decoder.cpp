@@ -3,63 +3,63 @@
 
 using namespace std;
 
-Decoder::Decoder(std::string url, CPcmCallback cbk)
-    : _url(url),
-      _fmt_ctx(nullptr),
-      _codec(nullptr),
-      _c(nullptr),
-      _CPcmCallback(cbk),
-      _video_index(-1),
-      _audio_index(-1) {
+Decoder::Decoder(string url, CPcmCallback cbk)
+    : mUrl(url),
+      mCbk(cbk),
+      mAVFormatCtx(nullptr),
+      mAVCodec(nullptr),
+      mAVCodecCtx(nullptr),
+      mVideoIndex(-1),
+      mAudioIndex(-1) {
     av_register_all();
     avformat_network_init();
 
-    if (avformat_open_input(&_fmt_ctx, _url.c_str(), NULL, NULL) < 0) {
+    if (avformat_open_input(&mAVFormatCtx, mUrl.c_str(), NULL, NULL) < 0) {
         cout << "avformat_open_input false" << endl;
     }
 
-    if (avformat_find_stream_info(_fmt_ctx, nullptr) < 0) {
+    if (avformat_find_stream_info(mAVFormatCtx, nullptr) < 0) {
         cout << "avformat_find_stream_info false" << endl;
     }
 
-    for (int i = 0; i < _fmt_ctx->nb_streams; i++) {
-        if (_fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-            _video_index = i;
+    for (int i = 0; i < mAVFormatCtx->nb_streams; i++) {
+        if (mAVFormatCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            mVideoIndex = i;
             continue;
         }
 
-        if (_fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-            _audio_index = i;
+        if (mAVFormatCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            mAudioIndex = i;
             continue;
         }
     }
 
-    _c = _fmt_ctx->streams[_audio_index]->codec;
-    this->_codec = avcodec_find_decoder(_c->codec_id);
-    if (!_codec) {
+    mAVCodecCtx = mAVFormatCtx->streams[mAudioIndex]->codec;
+    this->mAVCodec = avcodec_find_decoder(mAVCodecCtx->codec_id);
+    if (!mAVCodec) {
         cout << "Codec not found" << endl;
     }
 
-    if (avcodec_open2(_c, _codec, NULL) < 0) {
-        avcodec_free_context(&_c);  // free it
-        this->_c = nullptr;
+    if (avcodec_open2(mAVCodecCtx, mAVCodec, NULL) < 0) {
+        avcodec_free_context(&mAVCodecCtx);  // free it
+        this->mAVCodecCtx = nullptr;
         cout << "Could not open codec" << endl;
     }
 }
 
 Decoder::~Decoder() {
-    if (_c != NULL) {
-        avcodec_close(_c);
+    if (mAVCodecCtx != NULL) {
+        avcodec_close(mAVCodecCtx);
     }
 
-    if (_fmt_ctx != nullptr) {
-        if (!(_fmt_ctx->flags & AVFMT_NOFILE)) {
-            avio_close(_fmt_ctx->pb);
-            _fmt_ctx->pb = nullptr;
+    if (mAVFormatCtx != nullptr) {
+        if (!(mAVFormatCtx->flags & AVFMT_NOFILE)) {
+            avio_close(mAVFormatCtx->pb);
+            mAVFormatCtx->pb = nullptr;
         }
 
-        avformat_close_input(&_fmt_ctx);
-        _fmt_ctx = nullptr;
+        avformat_close_input(&mAVFormatCtx);
+        mAVFormatCtx = nullptr;
     }
 }
 
@@ -71,17 +71,17 @@ void Decoder::run() {
 
     AVPacket pkt = {0};
     while (true) {
-        if (av_read_frame(_fmt_ctx, &pkt) < 0) {
+        if (av_read_frame(mAVFormatCtx, &pkt) < 0) {
             av_packet_unref(&pkt);
             break;
         }
 
-        if (pkt.stream_index != _audio_index) {
+        if (pkt.stream_index != mAudioIndex) {
             av_packet_unref(&pkt);
             continue;
         }
 
-        decode(_c, &pkt, decoded_frame);
+        decode(mAVCodecCtx, &pkt, decoded_frame);
         av_packet_unref(&pkt);
     }
 
@@ -109,10 +109,10 @@ void Decoder::decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame) {
 
         int buff_size =
             av_samples_get_buffer_size(frame->linesize, frame->channels, frame->nb_samples, dec_ctx->sample_fmt, 0);
-        if (_CPcmCallback == nullptr) {
+        if (mCbk == nullptr) {
             return;
         }
 
-        _CPcmCallback((char *)(frame->data[0]), buff_size, frame->pts);
+        mCbk((char *)(frame->data[0]), buff_size, frame->pts);
     }
 }

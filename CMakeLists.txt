@@ -6,6 +6,15 @@ project(DecodeAudio)
 # set the project name and version
 project(DecodeAudio VERSION 1.0)
 
+message(STATUS "***********************************************************")
+message(STATUS "CMAKE_SOURCE_DIR->" ${CMAKE_SOURCE_DIR})
+message(STATUS "PROJECT_SOURCE_DIR->" ${PROJECT_SOURCE_DIR})
+message(STATUS "***********************************************************")
+
+# predefine macro
+add_definitions(-D __STDC_CONSTANT_MACROS)
+
+
 set(LINK_PATH ${CMAKE_SOURCE_DIR}/../../3rd/FFmpeg/lib)
 set(FFmpegInclude ${CMAKE_SOURCE_DIR}/../../3rd/FFmpeg/include)
 

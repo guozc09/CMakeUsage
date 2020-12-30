@@ -1,14 +1,12 @@
 #ifndef __DECODER_H__
 #define __DECODER_H__
 
-#define __STDC_CONSTANT_MACROS
 #include <stdlib.h>
 #include <string.h>
 
 #include <iostream>
 #include <memory>
 #include <string>
-
 
 #ifdef __cplusplus
 extern "C"
@@ -27,26 +25,27 @@ extern "C"
 }
 #endif
 
+using namespace std;
+
 using CPcmCallback = int (*)(char *data, int len, int ts);
 
 class Decoder {
   public:
-    Decoder(std::string url, CPcmCallback cbk);
+    Decoder(string url, CPcmCallback cbk);
     ~Decoder();
 
   public:
-    void decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame);
     void run();
+    void decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame);
 
   private:
-    std::string _url;
-    CPcmCallback _CPcmCallback;
-    AVFormatContext *_fmt_ctx = nullptr;
-    AVCodec *_codec;
-    AVCodecContext *_c;
-    int _video_index;
-    int _audio_index;
-    AVFrame *frame;
+    string mUrl;
+    CPcmCallback mCbk;
+    AVFormatContext *mAVFormatCtx;
+    AVCodec *mAVCodec;
+    AVCodecContext *mAVCodecCtx;
+    int mVideoIndex;
+    int mAudioIndex;
 };
 
 #endif
