@@ -23,10 +23,10 @@ link_directories(${LINK_PATH})
 
 # add the executable
 add_executable(DecodeAudio
-    decoder.cpp
+    AudioDecoder.cpp
     test.cpp)
 
-set(mFFmpeg avcodec avformat swscale avutil avfilter swresample)
+set(mFFmpeg avcodec avformat avutil swresample)
 target_link_libraries(DecodeAudio ${mFFmpeg})
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
