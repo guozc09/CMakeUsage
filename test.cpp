@@ -3,9 +3,10 @@
 using namespace std;
 
 int main(int argc, char **argv) {
-    AudioDecoder decoder(AV_CODEC_ID_MP3);
-    string infile = "../../doc/test.mp3";
-    string outfile = "../../doc/testout.pcm";
+    AudioDecoder decoder;
+    string fileName = "../../doc/那女孩对我说";
+    string infile = fileName + ".mp3";
+    string outfile = fileName + ".pcm";
     decoder.decodeFile(infile, outfile);
     return 0;
 }

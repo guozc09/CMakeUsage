@@ -4,6 +4,7 @@
 extern "C" {
 #endif
 #include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
 #include <libavutil/frame.h>
 #include <libavutil/mem.h>
@@ -16,131 +17,58 @@ using namespace std;
 #define AUDIO_INBUF_SIZE 20480
 #define AUDIO_REFILL_THRESH 4096
 
-AudioDecoder::AudioDecoder(enum AVCodecID codecId) : mAVCodecCtx(nullptr), mChannels(0) {
-    mPkt = av_packet_alloc();
-    /* find the MPEG audio decoder */
-    mAVCodec = avcodec_find_decoder(codecId);
-    if (mAVCodec == nullptr) {
-        fprintf(stderr, "Codec not found\n");
-        exit(1);
-    }
-
-    mParser = av_parser_init(mAVCodec->id);
-    if (mParser == nullptr) {
-        fprintf(stderr, "Parser not found\n");
-        exit(1);
-    }
-
-    mAVCodecCtx = avcodec_alloc_context3(mAVCodec);
-    if (mAVCodecCtx == nullptr) {
-        fprintf(stderr, "Could not allocate audio codec context\n");
-        exit(1);
-    }
-
-    /* open it */
-    if (avcodec_open2(mAVCodecCtx, mAVCodec, nullptr) < 0) {
-        fprintf(stderr, "Could not open codec\n");
-        exit(1);
-    }
-
-    mDecodedFrame = av_frame_alloc();
-    if (mDecodedFrame == nullptr) {
-        fprintf(stderr, "Could not allocate audio frame context\n");
-        exit(1);
-    }
+AudioDecoder::AudioDecoder() : mASIndex(-1) {
+    Trace(__FUNCTION__);
+    mFormatCtx = avformat_alloc_context();
 }
 
 AudioDecoder::~AudioDecoder() {
-    if (mAVCodecCtx != nullptr)
-        avcodec_free_context(&mAVCodecCtx);
-    if (mParser != nullptr)
-        av_parser_close(mParser);
-    if (mDecodedFrame != nullptr)
-        av_frame_free(&mDecodedFrame);
-    if (mPkt != nullptr)
-        av_packet_free(&mPkt);
+    Trace(__FUNCTION__);
+    if (mFormatCtx) {
+        avformat_free_context(mFormatCtx);
+    }
 }
 
 void AudioDecoder::decodeFile(string &infileName, string &outfileName) {
+    Trace(__FUNCTION__);
+
     if (infileName.empty() || outfileName.empty()) {
         fprintf(stderr, "file name is empty!! do nothing!!\n");
         return;
     }
-    /* decode until eof */
-    int ret = 0;
-    uint8_t inbuf[AUDIO_INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
-    FILE *infile, *outfile;
 
-    infile = fopen(infileName.c_str(), "rb");
-    if (!infile) {
-        fprintf(stderr, "Could not open %s\n", infileName.c_str());
+    AVStream *avStream = checkAVStream(infileName);
+    AVCodecParameters *codecpar = avStream->codecpar;
+    AVCodec *aCodec = avcodec_find_decoder(codecpar->codec_id);
+    if (!aCodec) {
+        fprintf(stderr, "avcodec_find_decoder failed!!\n");
         return;
     }
-    outfile = fopen(outfileName.c_str(), "wb");
-    if (!outfile) {
-        fprintf(stderr, "Could not open %s\n", outfileName.c_str());
-        fclose(infile);
+    /* open codec */
+    AVCodecContext *aCodecCtx = avcodec_alloc_context3(aCodec);
+    avcodec_parameters_to_context(aCodecCtx, codecpar);
+    aCodecCtx->pkt_timebase = avStream->time_base;
+    if (avcodec_open2(aCodecCtx, aCodec, nullptr) < 0) {
+        fprintf(stderr, "Could not open codec\n");
         return;
     }
 
-    uint8_t *data = inbuf;
-    size_t data_size = fread(inbuf, 1, AUDIO_INBUF_SIZE, infile);
-    while (data_size > 0) {
-        ret = av_parser_parse2(mParser, mAVCodecCtx, &mPkt->data, &mPkt->size, data, data_size, AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
-        if (ret < 0) {
-            fprintf(stderr, "Error while parsing\n");
-            return;
-        }
-        data += ret;
-        data_size -= ret;
-
-        if (mPkt->size) {
-            decode(mAVCodecCtx, mPkt, mDecodedFrame, outfile);
-        }
-
-        if (data_size < AUDIO_REFILL_THRESH) {
-            memmove(inbuf, data, data_size);
-            data = inbuf;
-            int len = fread(data + data_size, 1, AUDIO_INBUF_SIZE - data_size, infile);
-            if (len > 0)
-                data_size += len;
-        }
+    if (decodePacket(aCodecCtx, outfileName)) {
+        fprintf(stderr, "decodePacket failed\n");
+        return;
     }
 
-    /* flush the decoder */
-    mPkt->data = nullptr;
-    mPkt->size = 0;
-    decode(mAVCodecCtx, mPkt, mDecodedFrame, outfile);
+    outputPcmInfo(aCodecCtx, outfileName);
 
-    /* print output pcm infomations, because there have no metadata of pcm */
-    mSFmt = mAVCodecCtx->sample_fmt;
-
-    if (av_sample_fmt_is_planar(mSFmt)) {
-        const char *packed = av_get_sample_fmt_name(mSFmt);
-        printf(
-            "Warning: the sample format the decoder produced is planar "
-            "(%s). This example will output the first channel only.\n",
-            packed ? packed : "?");
-        mSFmt = av_get_packed_sample_fmt(mSFmt);
+    if (aCodecCtx) {
+        avcodec_close(aCodecCtx);
+        avcodec_free_context(&aCodecCtx);
     }
-
-    mChannels = mAVCodecCtx->channels;
-
-    const char *fmt = nullptr;
-    ret = getFormatFromSampleFmt(&fmt, mSFmt);
-    if (ret > 0) {
-        printf(
-            "Play the output audio file with the command:\n"
-            "ffplay -infile %s -ac %d -ar %d %s\n",
-            fmt, mChannels, mAVCodecCtx->sample_rate, outfileName.c_str());
-    }
-
-    fclose(infile);
-    fclose(outfile);
 }
 
 int AudioDecoder::getFormatFromSampleFmt(const char **fmt, enum AVSampleFormat sample_fmt) {
-    int i;
+    Trace(__FUNCTION__);
+
     struct sample_fmt_entry {
         enum AVSampleFormat sample_fmt;
         const char *fmt_be, *fmt_le;
@@ -151,7 +79,7 @@ int AudioDecoder::getFormatFromSampleFmt(const char **fmt, enum AVSampleFormat s
     };
     *fmt = nullptr;
 
-    for (i = 0; i < FF_ARRAY_ELEMS(sample_fmt_entries); i++) {
+    for (size_t i = 0; i < FF_ARRAY_ELEMS(sample_fmt_entries); i++) {
         struct sample_fmt_entry *entry = &sample_fmt_entries[i];
         if (sample_fmt == entry->sample_fmt) {
             *fmt = AV_NE(entry->fmt_be, entry->fmt_le);
@@ -163,12 +91,14 @@ int AudioDecoder::getFormatFromSampleFmt(const char **fmt, enum AVSampleFormat s
     return -1;
 }
 
-void AudioDecoder::decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame, FILE *outfile) {
+void AudioDecoder::decode(AVCodecContext *dec_ctx, AVPacket *packet, AVFrame *frame, FILE *outfile) {
+    Trace(__FUNCTION__);
+
     int i = 0, ch = 0;
     int ret = 0, data_size = 0;
 
     /* send the packet with the compressed data to the decoder */
-    ret = avcodec_send_packet(dec_ctx, pkt);
+    ret = avcodec_send_packet(dec_ctx, packet);
     if (ret < 0) {
         fprintf(stderr, "Error submitting the packet to the decoder, avcodec_send_packet errcode:%d\n", ret);
         return;
@@ -194,4 +124,85 @@ void AudioDecoder::decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame
     }
 
     return;
+}
+
+AVStream *AudioDecoder::checkAVStream(string &infileName) {
+    int ret = 0;
+    ret = avformat_open_input(&mFormatCtx, infileName.c_str(), nullptr, nullptr);
+    if (ret != 0) {
+        fprintf(stderr, "av_open_input_file failed ret:%d!!\n", ret);
+        return nullptr;
+    }
+
+    ret = avformat_find_stream_info(mFormatCtx, nullptr);
+    if (ret < 0) {
+        printf("Couldn't find stream information ret :%d\n", ret);
+        return nullptr;
+    }
+    mASIndex = -1;
+    for (int i = 0; i < (int)(mFormatCtx->nb_streams); i++) {
+        if (mFormatCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            mASIndex = i;
+            return mFormatCtx->streams[mASIndex];
+        }
+    }
+
+    fprintf(stderr, "Do not find AVMEDIA_TYPE_AUDIO !!\n");
+    return nullptr;
+}
+
+int AudioDecoder::decodePacket(AVCodecContext *aCodecCtx, string &outfileName) {
+    FILE *outfile = fopen(outfileName.c_str(), "wb");
+    if (!outfile) {
+        fprintf(stderr, "Could not open %s\n", outfileName.c_str());
+        return -1;
+    }
+
+    AVPacket *packet = av_packet_alloc();
+    AVFrame *decodeFrame = av_frame_alloc();
+    if (decodeFrame == nullptr) {
+        fprintf(stderr, "Could not allocate audio frame context\n");
+        av_packet_free(&packet);
+        fclose(outfile);
+        return -1;
+    }
+    while (av_read_frame(mFormatCtx, packet) >= 0) {
+        if (packet->stream_index == mASIndex) {
+            if (packet->size) {
+                decode(aCodecCtx, packet, decodeFrame, outfile);
+            }
+        }
+    }
+    /* flush the decoder */
+    packet->data = nullptr;
+    packet->size = 0;
+    decode(aCodecCtx, packet, decodeFrame, outfile);
+
+    av_packet_free(&packet);
+    av_frame_free(&decodeFrame);
+    fclose(outfile);
+    return 0;
+}
+
+void AudioDecoder::outputPcmInfo(AVCodecContext *aCodecCtx, string &outfileName) {
+    /* print output pcm infomations, because there have no metadata of pcm */
+    enum AVSampleFormat sFmt;
+    sFmt = aCodecCtx->sample_fmt;
+
+    if (av_sample_fmt_is_planar(sFmt)) {
+        const char *packed = av_get_sample_fmt_name(sFmt);
+        printf(
+            "Warning: the sample format the decoder produced is planar "
+            "(%s). This example will output the first channel only.\n",
+            packed ? packed : "?");
+        sFmt = av_get_packed_sample_fmt(sFmt);
+    }
+
+    int channels = aCodecCtx->channels;
+    const char *fmt = nullptr;
+    int ret = getFormatFromSampleFmt(&fmt, sFmt);
+    if (!ret) {
+        printf("Play %s with the parameter: format[%s] channels[%d] sample_rate[%d] \n",
+               outfileName.c_str(), fmt, channels, aCodecCtx->sample_rate);
+    }
 }
