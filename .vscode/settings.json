@@ -39,5 +39,7 @@
         "stdexcept": "cpp",
         "streambuf": "cpp",
         "typeinfo": "cpp"
-    }
+    },
+    "cmake.configureOnOpen": true,
+    "C_Cpp.default.configurationProvider": "vector-of-bool.cmake-tools"
 }
